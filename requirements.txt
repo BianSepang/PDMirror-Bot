@@ -1,0 +1,6 @@
+aioaria2
+aiohttp
+aria2p
+pyrofork
+tgcrypto-pyrofork
+tomli
