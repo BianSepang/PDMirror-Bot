@@ -5,7 +5,7 @@ import sys
 import tomli
 
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # Setting up logging
 logging.basicConfig(

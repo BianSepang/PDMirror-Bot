@@ -60,6 +60,7 @@ class BotClient(Client):
 
         return self
     
+
     async def recover_state(self):
         try:
             state = self.db.get(self.db_query.name == "state")
@@ -90,8 +91,8 @@ class BotClient(Client):
             elif isinstance(diff, raw.types.updates.DifferenceTooLong):
                 pts = diff.pts
                 continue
-            users = {user.id for user in diff.users}
-            chats = {chat.id for chat in diff.chats}
+            users = {user.id: user for user in diff.users}
+            chats = {chat.id: chat for chat in diff.chats}
             if isinstance(diff, raw.types.updates.DifferenceSlice):
                 new_state = diff.intermediate_state
                 pts = new_state.pts
