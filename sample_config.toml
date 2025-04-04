@@ -2,7 +2,12 @@
 api_id = ""
 api_hash = ""
 bot_token = ""
+owner_id = ""
 
 [general]
 download_dir = "downloads"
 pixeldrain_api_key = ""
+
+[users]
+authorized_user = ""
+authorized_chat = ""

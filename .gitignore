@@ -80,6 +80,7 @@ pyrightconfig.json
 *.env
 .env.*
 config.toml
+db.json
 
 # dotenv / local secrets
 config.ini

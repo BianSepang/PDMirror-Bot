@@ -21,7 +21,7 @@ class AioAria:
 
         return logger
 
-    
+
     @classmethod
     async def initialize(cls):
         try:

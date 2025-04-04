@@ -1,5 +1,6 @@
 import asyncio
 import shlex
+import time
 
 
 async def run_command(command, shell=False):
@@ -44,7 +45,13 @@ def readable_bytes(size_in_bytes: int, decimal_places: int = 2) -> str:
     return f"{size_in_bytes:.{decimal_places}f} {units[index]}"
 
 
-def format_duration_us(t_us):
+def usec() -> int:
+    """Returns the current time in microseconds since the Unix epoch."""
+
+    return (time.time() * 10**6)
+
+
+def format_duration_us(t_us) -> str:
     """Formats the given microsecond duration as a string."""
 
     t_us = int(t_us)
@@ -74,3 +81,12 @@ def format_duration_us(t_us):
         return f"{int(t_ms)} ms"
 
     return f"{int(t_us)} μs"
+
+
+def format_bytes(size):
+    # Converts bytes to a human-readable format
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size < 1024:
+            return f"{size:.2f} {unit}"
+        size /= 1024
+    return f"{size:.2f} PB"

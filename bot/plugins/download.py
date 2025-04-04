@@ -5,11 +5,12 @@ from pyrogram import filters
 from pyrogram.types import Message
 
 from bot.bot_client import BotClient
+from bot.utils.filters import AUTHORIZED_ONLY
 from bot.utils.tools import format_duration_us, readable_bytes
 from bot.utils.pixeldrain import upload_file_to_pixeldrain
 
 
-@BotClient.on_message(filters.incoming & filters.private & filters.command(["download", "dl"]))
+@BotClient.on_message(filters.incoming & AUTHORIZED_ONLY & filters.command(["download", "dl"]))
 async def download_handler(client: BotClient, message: Message):
     if len(message.command) < 2:
         await message.reply("Must provide a download link.")
@@ -57,7 +58,7 @@ async def download_handler(client: BotClient, message: Message):
                 last_update_time = now
 
 
-@BotClient.on_message(filters.incoming & filters.private & filters.command("pd"))
+@BotClient.on_message(filters.incoming & AUTHORIZED_ONLY & filters.command("pd"))
 async def pd_handler(client: BotClient, message: Message):
     if len(message.command) < 2:
         await message.reply("Input args")
