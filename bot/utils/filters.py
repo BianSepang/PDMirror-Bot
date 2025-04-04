@@ -23,5 +23,5 @@ async def authorized_only_filter(_, client: BotClient, message: Message):
     )
 
 
-# OWNER_ONLY = filters.create(owner_filter)
-# AUTHORIZED_ONLY = filters.create(authorized_only_filter)
+OWNER_ONLY = filters.create(owner_filter)
+AUTHORIZED_ONLY = filters.create(authorized_only_filter)
