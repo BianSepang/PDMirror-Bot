@@ -1,5 +1,6 @@
 aioaria2
 aiohttp
+aiopath
 pyrofork
 tgcrypto-pyrofork
 tomli

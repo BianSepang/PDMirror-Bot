@@ -15,6 +15,10 @@ class BotClient(Client):
         self.config = CONFIG_DICT
         self.db = TinyDB("db.json").table("bot_settings")
         self.db_query = Query()
+        # Map of aria2 download GID -> (chat_id, message_id) for status messages
+        self.active_downloads = {}
+        # Map of user_id -> (chat_id, message_id, update_task) for status command messages
+        self.status_messages = {}
 
         super().__init__(
             name="botclient",
@@ -65,58 +69,92 @@ class BotClient(Client):
         try:
             state = self.db.get(self.db_query.name == "state")
         except Exception as e:
-            self.logger.info(e, exc_info=True)
+            self.logger.error("Failed to read saved state from DB", exc_info=True)
             return
-        
+
         if not state:
             return
-        
+
         self.logger.info("Recovering bot state.")
-        value = state.get("value")
-        pts = value.get("pts")
-        date = value.get("date")
-        prev_pts = 0
+        value = state.get("value", {}) or {}
+        pts = value.get("pts", 0)
+        date = value.get("date", 0)
+        prev_pts = None
+
+        start_time = asyncio.get_event_loop().time()
+        max_duration = 30.0  # seconds: fail-safe to avoid infinite loops
+        max_retries = 5
+        retry_count = 0
 
         while True:
-            diff = await self.invoke(
-                raw.functions.updates.GetDifference(
-                    pts=pts,
-                    date=date,
-                    qts=0,
+            # Timeout guard
+            if asyncio.get_event_loop().time() - start_time > max_duration:
+                self.logger.warning("recover_state timed out; removing saved state and aborting recovery.")
+                self.db.remove(self.db_query.name == "state")
+                break
+
+            try:
+                diff = await self.invoke(
+                    raw.functions.updates.GetDifference(
+                        pts=pts,
+                        date=date,
+                        qts=0,
+                    )
                 )
-            )
+                retry_count = 0
+            except Exception as e:
+                retry_count += 1
+                self.logger.warning("GetDifference failed (attempt %s/%s). Retrying...", retry_count, max_retries, exc_info=True)
+                if retry_count >= max_retries:
+                    self.logger.error("Max retries reached while recovering state; aborting and removing saved state.")
+                    self.db.remove(self.db_query.name == "state")
+                    break
+                # exponential backoff with cap
+                await asyncio.sleep(min(2 ** retry_count, 5))
+                continue
+
+            # Defensive handling of diff types and attributes
             if isinstance(diff, raw.types.updates.DifferenceEmpty):
                 self.db.remove(self.db_query.name == "state")
                 break
-            elif isinstance(diff, raw.types.updates.DifferenceTooLong):
-                pts = diff.pts
+            if isinstance(diff, raw.types.updates.DifferenceTooLong):
+                # advance pts and try again
+                pts = getattr(diff, "pts", pts)
                 continue
-            users = {user.id: user for user in diff.users}
-            chats = {chat.id: chat for chat in diff.chats}
+
+            users = {user.id: user for user in getattr(diff, "users", []) or []}
+            chats = {chat.id: chat for chat in getattr(diff, "chats", []) or []}
+
             if isinstance(diff, raw.types.updates.DifferenceSlice):
-                new_state = diff.intermediate_state
-                pts = new_state.pts
-                date = new_state.date
-                # Stop if current pts is same with previous loop
-                if prev_pts == pts:
+                new_state = getattr(diff, "intermediate_state", None)
+                if new_state:
+                    pts = getattr(new_state, "pts", pts)
+                    date = getattr(new_state, "date", date)
+                # stop if stuck on same pts
+                if prev_pts is not None and prev_pts == pts:
+                    self.logger.warning("recover_state detected no progress (pts unchanged). Cleaning up saved state.")
                     self.db.remove(self.db_query.name == "state")
                     break
                 prev_pts = pts
             else:
-                new_state = diff.state
-            for msg in diff.new_messages:
-                self.dispatcher.updates_queue.put_nowait((
-                    raw.types.UpdateNewMessage(
-                        message=msg,
-                        pts=new_state.pts,
-                        pts_count=-1,
-                    ),
-                    users,
-                    chats,
-                ))
+                new_state = getattr(diff, "state", None)
 
-            for update in diff.other_updates:
-                self.dispatcher.updates_queue.put_nowait((update, users, chats))
+            # enqueue new messages and other updates defensively
+            for msg in getattr(diff, "new_messages", []) or []:
+                try:
+                    pts_for_msg = getattr(new_state, "pts", pts) if new_state else pts
+                    update = raw.types.UpdateNewMessage(message=msg, pts=pts_for_msg, pts_count=-1)
+                    self.dispatcher.updates_queue.put_nowait((update, users, chats))
+                except Exception:
+                    self.logger.exception("Failed to enqueue UpdateNewMessage from recovered diff.")
+
+            for upd in getattr(diff, "other_updates", []) or []:
+                try:
+                    self.dispatcher.updates_queue.put_nowait((upd, users, chats))
+                except Exception:
+                    self.logger.exception("Failed to enqueue other update from recovered diff.")
+
             if isinstance(diff, raw.types.updates.Difference):
+                # final snapshot reached; remove saved state
                 self.db.remove(self.db_query.name == "state")
                 break
